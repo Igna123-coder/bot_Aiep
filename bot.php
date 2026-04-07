@@ -23,8 +23,8 @@ $messageUsuario = $update['message']['text'];
 // 3. Función IA (Sin cURL, modo seguro)
 function procesarConIA($mensaje, $key) {
     // CAMBIO APLICADO: Modelo gemini-1.0-pro
-    $url = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-1.0-pro:generateContent?key=' . $key;
-    
+    $url = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=' . $key;
+
     $data = [
         "contents" => [[
             "parts" => [["text" => "Eres un asistente de AIEP Chile. Responde de forma breve y amable. El alumno dice: " . $mensaje]]
