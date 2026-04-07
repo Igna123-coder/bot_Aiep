@@ -1,29 +1,80 @@
+<?php
+// Mostrar errores para evitar silencios
+error_reporting(E_ALL);
+ini_set('display_errors', 1);
+
+// 1. Tokens y Llaves
+$token = '8740398851:AAETpsAsEvDFzwci8jyrgf0GcwLUhhb0agU';
+$website = 'https://api.telegram.org/bot'.$token;
+$apiKeyIA = 'AIzaSyB1Uies1S6VPK6MUUgbs1MpuoKdPT4MUiY';
+
+// 2. Capturar mensaje
+$input = file_get_contents('php://input');
+$update = json_decode($input, TRUE);
+
+// Si no hay texto, detener para no causar errores
+if (!isset($update['message']['text'])) {
+    exit;
+}
+
+$chatId = $update['message']['chat']['id'];
+$messageUsuario = $update['message']['text'];
+
+// 3. Función IA (Sin cURL, modo seguro)
 function procesarConIA($mensaje, $key) {
-    // CAMBIO CLAVE: Usamos gemini-1.5-flash-latest que es la dirección más estable
-    $url = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent?key=' . $key;
+    $url = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=' . $key;
     
     $data = [
         "contents" => [[
-            "parts" => [["text" => "Eres un asistente de la universidad AIEP. Responde breve. El mensaje es: " . $mensaje]]
+            "parts" => [["text" => "Eres un asistente de AIEP Chile. Responde de forma breve y amable. El alumno dice: " . $mensaje]]
         ]]
     ];
 
-    $ch = curl_init($url);
-    curl_setopt($ch, CURLOPT_HTTPHEADER, ['Content-Type: application/json']);
-    curl_setopt($ch, CURLOPT_POST, 1);
-    curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode($data));
-    curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-    curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
+    $options = [
+        'http' => [
+            'header'  => "Content-Type: application/json\r\n",
+            'method'  => 'POST',
+            'content' => json_encode($data),
+            'ignore_errors' => true // CLAVE: Evita que el servidor se caiga si Google rechaza la llave
+        ],
+        'ssl' => [
+            'verify_peer' => false,
+            'verify_peer_name' => false
+        ]
+    ];
 
-    $response = curl_exec($ch);
-    $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-    curl_close($ch);
-
-    if ($httpCode != 200) {
-        // Esto nos ayudará a saber si el error cambia (ej. de 404 a 400 o 403)
-        return "Error técnico: Código $httpCode. Revisa que la API Key en GitHub sea igual a la de Google Studio.";
+    $context  = stream_context_create($options);
+    $response = file_get_contents($url, false, $context);
+    
+    // Si la conexión falla rotundamente
+    if ($response === false) {
+         return "Error crítico: El servidor de Render no puede salir a Internet.";
     }
 
     $result = json_decode($response, true);
-    return $result['candidates'][0]['content']['parts'][0]['text'] ?? "La IA no pudo responder.";
+    
+    // Si Google nos manda un error por mala configuración
+    if (isset($result['error'])) {
+        return "Error de Google: " . $result['error']['message'];
+    }
+
+    // Respuesta exitosa
+    return $result['candidates'][0]['content']['parts'][0]['text'] ?? "La IA no supo qué responder.";
 }
+
+// 4. Lógica de Respuesta
+if ($messageUsuario == '/start') {
+    $respuesta = "¡Hola! Soy tu bot de automatización de AIEP. ¿En qué te ayudo?";
+} else {
+    $respuesta = procesarConIA($messageUsuario, $apiKeyIA);
+}
+
+sendMessage($chatId, $respuesta);
+
+// 5. Función de Envío
+function sendMessage($chatId, $response) {
+    global $website;
+    $url = $website.'/sendMessage?chat_id='.$chatId.'&text='.urlencode($response);
+    file_get_contents($url);
+}
+?>
